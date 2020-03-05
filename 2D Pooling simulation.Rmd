@@ -1,0 +1,78 @@
+---
+title: '2D Pooling: Simulation'
+author: "Xianbin Cheng"
+date: "January 23, 2019"
+output: html_document
+---
+
+# Objective  
+
+  1. We want to simulate two-dimensional pooling.
+  2. We want to analyze the performance and the cost.
+  
+# Method  
+
+1. Load necessary libraries and files.  
+
+```{r, message=FALSE, warning = FALSE}
+library(tidyverse)
+library(Hmisc)
+source("1D_pooling_simulation.R")
+source("2D_pooling_simulation.R")
+source("STD_simulation.R")
+```
+
+2. Set input parameters
+
+  * `n` = the total number of kernels in a plate (48 by default).
+  * `n_pool` = the number of pools. When pooling by rows, `n_pool` = 6. When pooling by columns, `n_pool` = 8.
+
+```{r}
+n = 48
+n_pos_vals = 1:47
+thresh = 20
+n_iter = 1000
+```
+
+3. Generate simulated data. Calculate sensitivity, specificity, and the total number of tests needed. The function used to generate random contamination levels is the same as the one used to generate data for STD simulation. 
+
+```{r, eval = FALSE}
+# sample size = 48
+set.seed(123)
+result = tune_2d_n_pos(n_pos_vals = n_pos_vals, n_iter = n_iter, n = n, thresh = thresh, n_row = 6, n_col = 8)
+```
+
+```{r, echo = FALSE}
+result = readRDS("Pool_2d_48_1000.rds")
+```
+
+```{r}
+metrics = do.call(what = rbind.data.frame, args = result) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost = do.call(what = rbind.data.frame, args = result) %>%
+  mutate(putative_pos = sensi*n_pos + (1-speci)*(n-n_pos),
+         n_test_total = 6 + 8 + putative_pos,
+         n_pipette = n * 2 + 6 + 8 + putative_pos)
+```
+
+# Results
+
+1. Visualization of metrics with simulated data.
+
+```{r}
+draw_metrics(df = metrics, method = "median_hilow")
+```
+
+2. Cost analysis.
+
+  1) The total number of tests needed:
+
+```{r}
+draw_cost(df = cost, n = n, var = n_test_total, ylab = "The total number of tests needed")
+```
+
+  2) The number of pipetting:
+  
+```{r}
+draw_cost(df = cost, n = n, var = n_pipette, ylab = "The number of transfers")
+```

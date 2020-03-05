@@ -1,0 +1,69 @@
+---
+title: "STD 2"
+author: "Xianbin Cheng"
+date: "February 7, 2019"
+output: html_document
+---
+
+# Objective
+
+  * Create STD pooling schemes for 48-well plates where prevalence is 0.02 (1 pos) with no pooling restriction.
+  
+  * Create STD pooling schemes for 96-well plates where prevalence is 0.01 (1 pos) with no pooling restriction.
+  
+# Method
+
+1. Load necessary scripts and libraries.
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(binhf)
+library(raster)
+library(primes)
+source("STD v4.R")
+```
+
+2. Set up basic parameters.
+
+  * `n` = sample size
+  * `d` = maximum number of positive samples expected
+  * `E` = maximum allowable number of errors
+  * `m` = maximum allowable number of individual samples in a pool
+
+```{r}
+#n = 48
+d = 1
+E = 0
+#m = n
+```
+
+3. Run the STD generator.
+
+```{r}
+STD_generator
+```
+
+```{r}
+STD_48_1pos = STD_generator(n = 48, d = d, E = E, m = 48)
+STD_96_1pos = STD_generator(n = 96, d = d, E = E, m = 96)
+```
+
+# Result
+
+```{r}
+# 48 wells
+STD_48_1pos$construction
+draw_STD(data = STD_48_1pos, n = 48)
+
+# 96 wells
+STD_96_1pos$construction
+draw_STD(data = STD_96_1pos, n = 96)
+```
+
+```{r, echo = FALSE, eval = FALSE}
+write.csv(x = STD_48_1pos$table, file = "STD_48_7_2_1pos.csv", row.names = TRUE, col.names = TRUE)
+write.csv(x = STD_96_1pos$table, file = "STD_96_5_3_1pos.csv", row.names = TRUE, col.names = TRUE)
+write.csv(x = STD_48_1pos$matrix, file = "STD_48_7_2_1pos_mat.csv", row.names = TRUE, col.names = TRUE)
+write.csv(x = STD_96_1pos$matrix, file = "STD_96_5_3_1pos_mat.csv", row.names = TRUE, col.names = TRUE)
+```
+

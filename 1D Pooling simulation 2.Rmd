@@ -1,0 +1,154 @@
+---
+title: '1D Pooling: Simulation'
+author: "Xianbin Cheng"
+date: "December 17, 2018"
+output: html_document
+---
+
+# Objective  
+
+  1. We want to simulate one-dimensional pooling.
+  2. We want to analyze the cost.
+  
+# Method  
+
+1. Load necessary libraries and files.  
+
+```{r, message=FALSE, warning = FALSE}
+library(tidyverse)
+library(Hmisc)
+library(mc2d)
+source("1D_pooling_simulation.R")
+source("STD_simulation.R")
+```
+
+2. Set input parameters
+
+  * `n` = the total number of kernels in a plate (48 by default).
+  * `n_pool` = the number of pools.
+  * 
+
+```{r}
+#n = 48
+#n_pos_vals = 1:(n-1)
+thresh = 20
+n_iter = 1000
+by = "column"
+```
+
+3. Generate simulated data. Calculate sensitivity, specificity, and the total number of tests needed. The function used to generate random contamination levels is the same as the one used to generate data for STD simulation. 
+
+```{r, eval = FALSE}
+### 48-well
+# Pool by rows
+set.seed(123)
+pool_row_48 = tune_1d_n_pos(n_pos_vals = 1:(48-1), n_iter = n_iter, n = 48, thresh = thresh, by = "row")
+saveRDS(object = pool_row_48, file = "Pool_row_48_1000.rds")
+
+# Pool by columns
+set.seed(123)
+pool_col_48 = tune_1d_n_pos(n_pos_vals = 1:(48-1), n_iter = n_iter, n = 48, thresh = thresh, by = "column")
+saveRDS(object = pool_col_48, file = "Pool_col_48_1000.rds")
+
+### 96-well
+# Pool by rows
+set.seed(123)
+pool_row_96 = tune_1d_n_pos(n_pos_vals = 1:(96-1), n_iter = n_iter, n = 96, thresh = thresh, by = "row")
+saveRDS(object = pool_row_96, file = "Pool_row_96_1000.rds")
+
+# Pool by columns
+set.seed(123)
+pool_col_96 = tune_1d_n_pos(n_pos_vals = 1:(96-1), n_iter = n_iter, n = 96, thresh = thresh, by = "column")
+saveRDS(object = pool_col_96, file = "Pool_col_96_1000.rds")
+```
+
+```{r, echo = FALSE}
+pool_row_48 = readRDS("Pool_row_48_1000.rds")
+pool_col_48 = readRDS("Pool_col_48_1000.rds")
+pool_row_96 = readRDS("Pool_row_96_1000.rds")
+pool_col_96 = readRDS("Pool_col_96_1000.rds")
+```
+
+```{r}
+### 48-well
+# Pool by rows
+metrics_row_48 = do.call(what = rbind.data.frame, args = pool_row_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_row_48 = calc_1d_cost(data = pool_row_48, n = 48, by = "row")
+
+# Pool by columns
+metrics_col_48 = do.call(what = rbind.data.frame, args = pool_col_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_col_48 = calc_1d_cost(data = pool_col_48, n = 48, by = "column")
+
+### 96-well
+# Pool by rows
+metrics_row_96 = do.call(what = rbind.data.frame, args = pool_row_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_row_96 = calc_1d_cost(data = pool_row_96, n = 96, by = "row")
+
+# Pool by columns
+metrics_col_96 = do.call(what = rbind.data.frame, args = pool_col_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_col_96 = calc_1d_cost(data = pool_col_96, n = 96, by = "column")
+
+```
+
+# Results
+
+1. Visualization of metrics with simulated data.
+
+```{r}
+### 48-well
+# Pool by rows
+draw_metrics(df = metrics_row_48, n = 48, method = "median_hilow")
+
+# Pool by columns
+draw_metrics(df = metrics_col_48, n = 48, method = "median_hilow")
+
+### 96-well
+# Pool by rows
+draw_metrics(df = metrics_row_96, n = 96, method = "median_hilow")
+
+# Pool by columns
+draw_metrics(df = metrics_col_96, n = 96, method = "median_hilow")
+```
+
+2. Cost analysis.
+
+  1) The total number of tests needed:
+
+```{r}
+### 48-well
+# Pool by rows
+draw_cost(df = cost_row_48, n = 48, var = n_test_total, ylab = "The total number of tests needed")
+
+# Pool by columns
+draw_cost(df = cost_col_48, n = 48, var = n_test_total, ylab = "The total number of tests needed")
+
+### 96-well
+# Pool by rows
+draw_cost(df = cost_row_96, n = 96, var = n_test_total, ylab = "The total number of tests needed")
+
+# Pool by columns
+draw_cost(df = cost_col_96, n = 96, var = n_test_total, ylab = "The total number of tests needed")
+```
+
+  2) The number of pipetting:
+  
+```{r}
+### 48-well
+# Pool by rows
+draw_cost(df = cost_row_48, n = 48, var = n_pipette, ylab = "The number of transfers")
+
+# Pool by columns
+draw_cost(df = cost_col_48, n = 48, var = n_pipette, ylab = "The number of transfers")
+
+### 96-well
+# Pool by rows
+draw_cost(df = cost_row_96, n = 96, var = n_pipette, ylab = "The number of transfers")
+
+# Pool by columns
+draw_cost(df = cost_col_96, n = 96, var = n_pipette, ylab = "The number of transfers")
+```
+

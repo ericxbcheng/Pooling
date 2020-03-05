@@ -1,0 +1,116 @@
+---
+title: 'STD: Simulation'
+author: "Xianbin Cheng"
+date: "December 13, 2018"
+output: html_document
+---
+
+# Objective  
+
+  1) We want to use simulation to prove the STD(48; 7; 4) pooling design is reliable.
+  
+  2) We want to calculate the cost.
+  
+# Method  
+
+1. Load libraries and necessary inputs. 
+
+    * `n` = the number of kernels in one 48-well plate
+    * `q_val` = the q value for STD pooling
+    * `k_val` = the k value (number of layers) for STD pooling
+    * `n_pos` = the number of positive kernels 
+    * `thresh` = the aflatoxin level threshold (20 ppb)
+    * `STD` = the STD(48; 7; 4) pooling scheme
+    * `n_iter` = the number of iterations
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(raster)
+library(mc2d)
+source("STD_simulation.R")
+```
+
+```{r}
+n = 48
+q_val = 7
+k_val = 4
+n_pos = 3
+thresh = 20
+n_iter = 1000
+
+STD = read.csv("STD_48_7_4.csv", header = TRUE, row.name = 1, stringsAsFactors = FALSE) %>%
+  as.matrix()
+STD_mat = read.csv("STD_48_7_4 matrix.csv", header = TRUE, row.name = 1, stringsAsFactors = FALSE) %>%
+  as.matrix()
+```
+
+```{r, echo = FALSE}
+draw_STD(STD_mat = STD_mat, n = n, q = q_val, k = k_val)
+```
+
+```{r, echo = FALSE}
+kable_styling(kable(x = STD, format = "html"))
+```
+
+2. Define functions
+
+```{r}
+gen_elisa_af
+gen_pool_af
+rgamma_lim
+calc_metrics
+```
+
+3. Iterate the simulation n times for each possible `n_pos`. `n_pos` has a range from 1 to 47. Calculate sensitivities and specificities.
+
+```{r, eval = FALSE}
+set.seed(123)
+results = tune_n_pos(n_pos_vals = 1:(n-1), n_iter = n_iter, n = n, thresh = thresh, STD_mat = STD, q = q_val)
+```
+
+```{r, echo = FALSE}
+results = readRDS("STD_48_7_4_1000.rds")
+```
+
+```{r}
+metrics_STD = do.call(what = rbind.data.frame, args = results) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+```
+
+4. Calculate the number of re-tests and number of pipetting for each `n_pos`. Assume that there's no error in the assay and we do not consider the scenario where a sample concentration exceeds the maximum limit of the ELISA assay. The number of pipetting times does not include the pipetting while performing the ELISA.
+
+  `n(putative pos)` = TP + FP = sensitivity$\times$`n_pos` + (1 - specificity)$\times$(`n` - `n_pos`)
+
+```{r}
+cost_STD = do.call(what = rbind.data.frame, args = results) %>%
+  mutate(putative_pos = sensi*n_pos + (1-speci)*(n-n_pos),
+         n_test_total = q_val*k_val + putative_pos,
+         n_pipette = q_val*k_val*q_val + k_val*q_val + putative_pos)
+```
+
+# Results
+
+1. Visualization. Medians with a range from 2.5th percentile to 97.5th percentile are shown here.
+
+```{r, echo = FALSE, fig.keep = "high"}
+draw_metrics(df = metrics_STD, method = "median_hilow")
+```
+
+2. Cost analysis
+
+  1) The number of tests needed:
+
+  The dashed line is the number of tests needed by individual testing (48 tests).
+
+```{r}
+draw_cost(df = cost_STD, n = n, var = n_test_total, ylab = "The total number of tests needed")
+```
+
+  2) The number of pipetting needed:
+  
+```{r}
+draw_cost(df = cost_STD, n = n, var = n_pipette, ylab = "The number of transfers")
+```
+  

@@ -1,0 +1,250 @@
+---
+title: 'Pooling Validation: 1D and 2D'
+author: "Xianbin Cheng"
+date: "2/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Objective
+
+  We want to validate 1D and 2D pooling strategies by experiments on fumonisin-contaminated corn kernels.
+
+# Method
+
+```{r, echo = TRUE, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Hmisc)
+library(mc2d)
+library(EnvStats)
+library(MASS)
+source(file = "1D_pooling_simulation.R")
+source(file = "2D_pooling_simulation.R")
+source(file = "STD_simulation.R")
+```
+
+### 1. Experimental validation
+
+```{r, echo = TRUE}
+# sample size
+n = 48
+# positive threshold (ppm)
+thresh = 1
+```
+
+```{r, echo = FALSE}
+# Individual and pooled validation data are presented as ppb
+FM_indiv = read.csv(file = "Validation_FM_indiv.csv", header = TRUE, stringsAsFactors = FALSE)
+FM_pool = read.csv(file = "Validation_FM_pooled_1D2D.csv", header = TRUE, stringsAsFactors = FALSE)
+
+result_indiv = FM_indiv %>%
+  mutate(ID = str_split(string = .$Kernel_ID, pattern = "-", simplify = TRUE)[,2] %>% as.numeric(),
+         row = rep(x = 1:6, each = 8), 
+         column = rep(x = 1:8, times = 6), 
+         FM_class = ifelse(test = .$FM_Conc >= thresh*1000, yes = 1, no = 0) %>% as.factor())
+
+c_indiv = result_indiv$FM_Conc %>%
+  matrix(data = ., nrow = 6, ncol = 8, byrow = TRUE) %>%
+  as.vector()
+pool_r = subset(x = FM_pool, subset = by == "row", select = FM_Conc, drop = TRUE)
+pool_c = subset(x = FM_pool, subset = by == "column", select = FM_Conc, drop = TRUE)
+
+result_pool = tibble(by = c(rep("row", length(pool_r)), rep("column", length(pool_c))),
+                     conc = c(pool_r, pool_c),
+                     ID = c(str_c(rep("R", length(pool_r)), seq_along(pool_r), sep = ""), str_c(rep("C", length(pool_c)), seq_along(pool_c), sep = "")))
+```
+
+```{r, echo = FALSE}
+# a = ggplot(data = result_indiv) +
+#   geom_col(aes(x = ID, y = FM_Conc)) +
+#   geom_hline(yintercept = 1000, lty = 2) +
+#   scale_y_log10() +
+#   labs(x = "Single Kernel ID", y = "Fumonisin Concentration (ppb)") +
+#   theme_bw()
+# a
+
+a = ggplot(data = result_indiv) +
+  geom_tile(aes(x = column, y = row, fill = FM_class)) +
+  scale_x_continuous(breaks = 1:8) +
+  scale_y_continuous(breaks = 1:6) +
+  scale_fill_discrete(name = "Single Kernel Fumonisin Level", c = c(0,1), l = c(90, 0), label = c("< 1 ppm", ">= 1 ppm")) +
+  geom_vline(xintercept = seq(1.5, 7.5, 1), color = "white") +
+  geom_hline(yintercept = seq(1.5, 5.5, 1), color = "white") +
+  labs(x = "Column", y = "Row") +
+  theme_classic() +
+  theme(legend.position = "top")
+a
+
+b = ggplot(data = subset(x = result_pool, subset = by == "row"))+
+  geom_col(aes(x = ID, y = conc/1000)) +
+  geom_hline(yintercept = 1/length(pool_r), lty = 2) +
+  scale_y_sqrt() +
+  labs(x = "Row Pool ID", y = "Pooled Fumonisin Concentration (ppm)") +
+  theme_bw()
+b
+
+c = ggplot(data = subset(x = result_pool, subset = by == "column"))+
+  geom_col(aes(x = ID, y = conc/1000)) +
+  geom_hline(yintercept = 1/length(pool_c), lty = 2) +
+  scale_y_sqrt() +
+  labs(x = "Column Pool ID", y = "Pooled Fumonisin Concentration (ppm)") +
+  theme_bw()
+c
+```
+
+```{r, echo = TRUE}
+# In c(0, c_indiv), the 0 is a place holder for STD pooling.
+metric_1d_r = calc_1d_metrics(n = n, thresh = 1000, conc = c(0, c_indiv), c_pool = pool_r, by = "row")
+metric_1d_r
+
+metric_1d_c = calc_1d_metrics(n = n, thresh = 1000, conc = c(0, c_indiv), c_pool = pool_c, by = "column")
+metric_1d_c
+
+metric_2d = calc_2d_metrics(conc = c(0, c_indiv), pool_r = pool_r, pool_c = pool_c, n = n, thresh = 1000)
+metric_2d
+```
+
+### 2. Simulating fumonisin contamination.
+
+  * We used the data from Texas corn 2017 (528 observations) and removed observations whose fumonisin concentration is below LOD. Eventually, we have 93 observations with 43 highs and 50 lows. 
+  
+  * We want to simulate fumonisin contamination in healthy kernels and contaminated kernels, assuming they both follow log normal distributions.
+  
+  * We used the maximum-likelihood method to estimate parameters and used the 2-sided Kolmogorov-Smirnov test to measure goodness of fit between the simulated data and experimental data.
+
+```{r, echo = TRUE}
+# Experimental fumonisin data are presented in ppm
+Texas = read.csv(file = "Texas_Conc_Class_528obs_02_05_19.csv", header = TRUE, stringsAsFactors = FALSE, row.names = 1)
+Texas$FM_class[Texas$FM_class == "M"] = "H"
+
+# Remove obs whose [FM] is below LOD
+temp = Texas %>%
+  dplyr::filter(!duplicated(x = Texas$FM.ppm.))
+summary(as.factor(temp$FM_class))
+
+# Summary
+FM_H = subset(x = temp, subset = FM_class == "H", select = FM.ppm.) %>% unlist()
+FM_L = subset(x = temp, subset = FM_class == "L", select = FM.ppm.) %>% unlist()
+summary(FM_H)
+summary(FM_L)
+```
+
+```{r, echo = FALSE}
+ggplot(data = temp, aes(x = FM.ppm.)) +
+  geom_histogram(aes(fill = FM_class), bins = 60) +
+  scale_fill_discrete(name = "Single Kernel Fumonisin Level", labels = c(">= 1 ppm", "< 1 ppm")) +
+  labs(x = "Fumonisin Concentration (ppm)", y = "Number of Kernels") +
+  scale_x_log10() +
+  theme_bw() +
+  theme(legend.position = "top")
+```
+
+```{r, echo = TRUE}
+set.seed(123)
+fitdistr(x = FM_H, densfun = "lognormal")
+fitdistr(x = FM_L, densfun = "lognormal")
+
+prev = round(length(FM_H)/(length(c(FM_L, FM_H))), digits = 2)
+n_total = 1e6
+
+neg = rlnormTrunc(n = n_total*(1-prev), meanlog = -2.75, sdlog = 1.42, min = 0, max = 0.99)
+pos = rlnormTrunc(n = n_total*prev, meanlog = 3.62, sdlog = 1.74, min = 1, max = Inf)
+sim_data = data.frame(conc = c(pos, neg))
+
+ks.test(x = temp$FM.ppm., y = sim_data$conc)
+wilcox.test(x = temp$FM.ppm., y = sim_data$conc)
+```
+
+```{r, echo = FALSE}
+d = ggplot(data = temp, aes(x = FM.ppm.)) +
+  geom_histogram(aes(y = ..density..), bins = 60) +
+  geom_density(data = sim_data, aes(x = conc), fill = "grey", alpha = 0.3) +
+  scale_fill_discrete(name = "Single Kernel Fumonisin Level", labels = c(">= 1 ppm", "< 1 ppm")) +
+  labs(x = "Fumonisin Concentration (ppm)", y = "Density") +
+  scale_x_log10(breaks = c(0.01, 0.1, 1, 10, 100, 1000, 10000)) +
+  theme_bw() +
+  theme(legend.position = "top")
+d
+```
+
+### 3. Simulating pooling for fumonisin detection.
+
+```{r, echo = TRUE}
+set.seed(123)
+sim_1d_row = tune_1d_n_pos(n_pos_vals = 17, n_iter = 10000, n = n, thresh = thresh, by = "row", tox = "FM")
+sim_1d_col = tune_1d_n_pos(n_pos_vals = 17, n_iter = 10000, n = n, thresh = thresh, by = "column", tox = "FM")
+sim_2d = tune_2d_n_pos(n_pos_vals = 17, n_iter = 10000, n = n, thresh = thresh, tox = "FM")
+```
+
+```{r}
+f_vis = function(sim, experiment){
+  sim2 = bind_cols(sim) %>%
+    gather(data = ., key = "Metric", value = "Value", - n_pos) 
+
+  temp = tibble(Metric = c("sensi", "speci"), Value = experiment)
+  
+  ggplot() +
+    geom_boxplot(data = sim2, aes(x = as.factor(Metric), y = Value)) +
+    geom_point(data = temp, aes(x = as.factor(Metric), y = Value),  size = 5, shape = 18) +
+    scale_x_discrete(labels = c("Sensitivity", "Specificity")) +
+    scale_y_continuous(breaks = seq(0, 1, 0.1)) +
+    labs(x = NULL, y = "Metric value (48-well plate)") +
+    coord_cartesian(ylim = c(0,1)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 12))
+}
+```
+
+```{r, echo = TRUE}
+e = f_vis(sim = sim_1d_row, experiment = metric_1d_r)
+e
+f = f_vis(sim = sim_1d_col, experiment = metric_1d_c)
+f
+g = f_vis(sim = sim_2d, experiment = metric_2d)
+g
+```
+
+```{r}
+my_summary = function(sim){
+  
+  sim2 = bind_cols(sim) %>%
+    gather(data = ., key = "Metric", value = "Value", - n_pos) %>%
+    dplyr::filter(Metric == "speci") 
+  
+  a = summary(sim2$Value)
+  Q1 = a[2]
+  Q3 = a[5]
+  IQR = Q3 - Q1
+  LIF = Q1 - 1.5*IQR
+  UIF = Q3 + 1.5*IQR
+  
+  return(c(a, IQR = unlist(IQR), LIF = unlist(LIF), UIF = unlist(UIF)))
+}
+
+```
+
+```{r, echo = TRUE}
+my_summary(sim = sim_1d_row)
+my_summary(sim = sim_1d_col)
+my_summary(sim = sim_2d)
+```
+
+```{r, eval = FALSE}
+pdf(file = "Pooling_validation_1D2D.pdf")
+  a
+  b
+  c
+  d
+  e
+  f
+  g
+dev.off()
+```
+
+```{r, echo = TRUE}
+sessionInfo()
+```
+

@@ -1,0 +1,127 @@
+---
+title: 'Pooling: Visualization'
+author: "Xianbin Cheng"
+date: "January 24, 2019"
+output: html_document
+---
+
+# Method
+
+1. Load all the necessary packages and source codes.
+
+```{r, message=FALSE, warning = FALSE}
+library(tidyverse)
+library(Hmisc)
+source("1D_pooling_simulation.R")
+source("2D_pooling_simulation.R")
+source("STD_simulation.R")
+```
+
+2. Read rds files and necessary parameters.
+
+  * These files contain simulation results of STD(48; 7; 4) pooling, one-dimensional and two-dimensional pooling. The iteration time is 1000. The seed is set at 123.
+
+```{r}
+pool_STD = readRDS(file = "STD_48_7_4_1000.rds")
+pool_row = readRDS("Pool_row_48_1000.rds")
+pool_col = readRDS("Pool_col_48_1000.rds")
+pool_2d = readRDS("Pool_2d_48_1000.rds")
+
+n = 48
+q_val = 7
+k_val = 4
+thresh = 20
+
+n_pos_vals = 1:47
+n_iter = 1000
+```
+
+3. Clean them up for visualization.
+
+```{r}
+# STD
+metrics_STD = do.call(what = rbind.data.frame, args = pool_STD) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+
+cost_STD = do.call(what = rbind.data.frame, args = pool_STD) %>%
+  mutate(putative_pos = sensi*n_pos + (1-speci)*(n-n_pos),
+         n_test_total = q_val*k_val + putative_pos,
+         n_pipette = q_val*k_val*q_val + k_val*q_val + putative_pos)
+```
+
+```{r}
+# Pool by rows
+metrics_row = do.call(what = rbind.data.frame, args = pool_row) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_row = do.call(what = rbind.data.frame, args = pool_row) %>%
+  mutate(putative_pos = sensi*n_pos + (1-speci)*(n-n_pos),
+         n_test_total = 6 + putative_pos,
+         n_pipette = n + 6 + putative_pos)
+
+# Pool by columns
+metrics_col = do.call(what = rbind.data.frame, args = pool_col) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_col = do.call(what = rbind.data.frame, args = pool_col) %>%
+  mutate(putative_pos = sensi*n_pos + (1-speci)*(n-n_pos),
+         n_test_total = 8 + putative_pos,
+         n_pipette = n + 8 + putative_pos)
+```
+
+```{r}
+# 2D Pool
+metrics_2d = do.call(what = rbind.data.frame, args = pool_2d) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+
+cost_2d = do.call(what = rbind.data.frame, args = pool_2d) %>%
+  mutate(putative_pos = sensi*n_pos + (1-speci)*(n-n_pos),
+         n_test_total = 6 + 8 + putative_pos,
+         n_pipette = n * 2 + 6 + 8 + putative_pos)
+```
+
+```{r}
+### All metrics
+metrics_all = bind_rows(metrics_STD, metrics_row, metrics_col, metrics_2d) %>%
+  mutate(Pooling = c(rep("STD", times = nrow(metrics_STD)),
+                     rep("Row", times = nrow(metrics_row)),
+                     rep("Column", times = nrow(metrics_col)),
+                     rep("2D", times = nrow(metrics_2d))))
+
+### All cost
+cost_all = bind_rows(cost_STD, cost_row, cost_col, cost_2d) %>%
+  mutate(Pooling = c(rep("STD", times = nrow(cost_STD)),
+                     rep("Row", times = nrow(cost_row)),
+                     rep("Column", times = nrow(cost_col)),
+                     rep("2D", times = nrow(cost_2d))))
+```
+
+# Result
+
+1. Visualization of metrics
+
+```{r}
+p1 = draw_metrics_all(df = metrics_all)
+p1
+```
+
+2. Visualization of reagent cost.
+
+```{r}
+p2 = draw_cost_all(df = cost_all, n = n, var = n_test_total, ylab = "The total number of tests needed")
+p2
+```
+
+3. Visualization of labor cost
+
+```{r}
+p3 = draw_cost_all(df = cost_all, n = n, var = n_pipette, ylab = "The number of transfers")
+p3
+```
+
+```{r, eval = FALSE, echo= FALSE}
+pdf(file = "Pooling Visualization.pdf")
+  p1
+  p2
+  p3
+dev.off()
+```
+

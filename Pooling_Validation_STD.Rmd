@@ -1,0 +1,157 @@
+---
+title: 'Pooling Validation: STD'
+author: "Xianbin Cheng"
+date: "1/15/2020"
+output: html_document
+---
+
+# Objective
+
+  * Validate the STD pooling strategy (n = 48; q = 7; k = 4) with the Texas corn data (48 kernels from the `HH` bulk class)
+  
+# Method
+
+1. Load libraries and read files.
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(raster)
+library(mc2d)
+source("STD v4.R")
+source("STD_simulation.R")
+```
+
+```{r, echo = FALSE}
+pool_mat = read.csv(file = "STD_48_7_4 matrix.csv", header = TRUE, row.names = 1) %>% as.matrix()
+pool_scheme = read.csv(file = "STD_48_7_4.csv", header = TRUE, row.names = 1)
+result_pooled = read.csv(file = "STD_HH1_pooled.csv", header = TRUE)
+result_pooled = result_pooled %>%
+  mutate(ID = str_split(string = .$Kernel_ID, pattern = "-P", simplify = TRUE)[,2] %>% as.numeric()) %>%
+  arrange(.data = ., ID)
+
+result_indiv = read.csv(file = "STD_HH1_individual.csv", header = TRUE)
+result_indiv = result_indiv %>%
+  mutate(ID = str_split(string = .$Kernel_ID, pattern = "-", simplify = TRUE)[,2] %>% as.numeric()) %>%
+  arrange(.data = ., ID)
+```
+
+```{r, echo = FALSE}
+a = ggplot(data = result_indiv) +
+  geom_col(aes(x = ID, y = AF_Conc)) +
+  geom_hline(yintercept = 20, lty = 2) +
+  scale_y_continuous(breaks = seq(0, 150, 10)) +
+  labs(x = "Single Kernel ID", y = "Aflatoxin Concentration (ppb)") +
+  theme_bw()
+
+a
+```
+
+```{r, echo = FALSE}
+b = ggplot(data = result_pooled) +
+  geom_col(aes(x = as.factor(ID), y = AF_Conc)) +
+  geom_hline(yintercept = 20/ncol(pool_scheme), lty = 2) +
+  scale_y_continuous(breaks = seq(0, 100, 10)) +
+  labs(x = "Pool ID", y = "Pooled Aflatoxin Concentration (ppb)") +
+  theme_bw() 
+
+b
+```
+
+
+2. Set pooling parameters
+
+```{r}
+n = 48
+thresh = 20
+```
+
+3. Obtain the putative positives and negatives
+
+```{r}
+depool = classify(threshold_ind = thresh, conc = result_pooled$AF_Conc, scheme = pool_scheme)
+depool
+```
+
+# Result
+
+1. Compare the putative positives with the true positives and calculate sensitivity and specificity
+
+```{r, echo = FALSE}
+calc_metrics2 = function(thresh, conc, n, result){
+  
+  # Make a contingency table
+  putative_class = vector("numeric", length = n)
+  putative_class[result$sample_pos] = 1
+  true_class = ifelse(conc >= thresh, yes = 1, no = 0)
+  
+  # Manually convert the two vectors into factors
+  putative_class = factor(x = putative_class, levels = c(0, 1))
+  true_class = factor(x = true_class, levels = c(0, 1))
+  cont_table = table(true_class, putative_class)
+  
+  # Calculate sensitivity and specificity
+  sensi = cont_table[2,2] / (cont_table[2,2] + cont_table[2,1])
+  speci = cont_table[1,1] / (cont_table[1,1] + cont_table[1,2])
+  
+  out = c("sensitivity" = sensi, "specificity" = speci)
+  
+  return(out)
+}
+```
+
+```{r}
+# Which samples are true positives?
+which(result_indiv$AF_Conc >= thresh)
+
+# Calculate sensitivity and specificity
+result_metric = calc_metrics2(thresh = thresh, conc = result_indiv$AF_Conc, n = n, result = depool)
+result_metric
+```
+
+2. Run 10000 simulations for STD(48; 7; 4) when `n_pos` = 6.
+
+```{r}
+sim = tune_n_pos(n_pos_vals = 6, n_iter = 10000, n = n, thresh = thresh, STD_mat = pool_scheme)
+```
+
+```{r, echo = FALSE}
+sim2 = bind_cols(sim) %>%
+  gather(data = ., key = "Metric", value = "Value", - n_pos) 
+
+temp = tibble(Metric = c("sensi", "speci"), Value = result_metric)
+
+c = ggplot() +
+  geom_boxplot(data = sim2, aes(x = as.factor(Metric), y = Value)) +
+  geom_point(data = temp, aes(x = as.factor(Metric), y = Value),  size = 5, shape = 18) +
+  scale_x_discrete(labels = c("Sensitivity", "Specificity")) +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) +
+  labs(x = NULL, y = "Metric value (48-well plate)") +
+  coord_cartesian(ylim = c(0,1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 12))
+
+c
+```
+
+```{r}
+### Show statistics of the specificity
+temp_speci = subset(x = sim2, subset = Metric == "speci", select = Value)
+
+# Summary
+summary(object = temp_speci)
+
+# Lower inner fence
+IQR = diff(quantile(x = temp_speci$Value, probs = c(0.25, 0.75)))
+quantile(x = temp_speci$Value, probs = 0.25) - 1.5*IQR
+```
+
+```{r, echo = FALSE, eval = FALSE}
+pdf("Pooling_validation.pdf")
+  a
+  b
+  c
+dev.off()
+```
+

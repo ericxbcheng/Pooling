@@ -1,0 +1,63 @@
+---
+title: '1D Pooling: Theory'
+author: "Xianbin Cheng"
+date: "December 18, 2018"
+output: html_document
+---
+
+# Objective  
+
+  1. We want to calculate the sensitivity, specificity and cost of one-dimensional pooling using combination theories.
+  
+# Method  
+
+1. Load necessary libraries and files.
+
+```{r, message=FALSE, warning = FALSE}
+library(tidyverse)
+source("1D_pooling_theory.R")
+```
+
+2. Set input parameters
+
+  * `n` = the total number of kernels in a plate (48 by default).
+  * `n_pool` = the number of pools. When pooling by rows, `n_pool` = 6. When pooling by columns, `n_pool` = 8.
+
+```{r}
+n = 48
+```
+
+3. Calculate the sensitivity, specificity, and cost under theoretical assumptions. We assume the following scenario does not exist: a pool is flagged as positive when all the kernels are negative just because the pooled concentration reaches the pool limit. For example, when we pool by rows, any pool exceeding `r 20/8`ppb should be flagged as a positive pool. Even if all the kernels have 5 ppb aflatoxin, the pooled concentration would still exceed the limit, resulting in a lot of false positive kernels.
+
+```{r}
+# Pool by rows
+pool_row = gen_1d_data_theo(n = n, n_pool = 6)
+metrics_pbr = calc_metrics_1d_theo(df = pool_row)
+cost_pbr = calc_cost_1d_theo(df = pool_row, n_pool = 6)
+
+# Pool by columns
+pool_col = gen_1d_data_theo(n = n, n_pool = 8)
+metrics_pbc = calc_metrics_1d_theo(df = pool_col)
+cost_pbc = calc_cost_1d_theo(df = pool_col, n_pool = 8) 
+```
+
+# Result
+
+1. Visualization of expected sensitivity and specificity with different number of positive kernels.
+
+```{r}
+# Pool by rows
+draw_metrics_1d_theo(data = metrics_pbr, n = n)
+
+# Pool by columns
+draw_metrics_1d_theo(data = metrics_pbc, n = n)
+```
+
+2. Visualization of expected cost
+
+```{r}
+# Pool by rows
+draw_cost_1d_theo(data = cost_pbr, n = 48)
+# Pool by columns
+draw_cost_1d_theo(data = cost_pbc, n = 48)
+```

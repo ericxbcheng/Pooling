@@ -1,0 +1,138 @@
+---
+title: 'STD: Simulation 2'
+author: "Xianbin Cheng"
+date: "December 13, 2018"
+output: html_document
+---
+
+# Objective  
+
+  1) We want to simulate the STD(48; 7; 2) and STD(96; 5; 3) pooling designs.
+  
+  2) We want to calculate the cost.
+  
+# Method  
+
+1. Load libraries and necessary inputs. 
+
+    * `n` = the number of kernels
+    * `q_val` = the q value for STD pooling
+    * `k_val` = the k value (number of layers) for STD pooling
+    * `n_pos` = the number of positive kernels 
+    * `thresh` = the aflatoxin level threshold (20 ppb)
+    * `n_iter` = the number of iterations
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(raster)
+library(mc2d)
+source("STD_simulation.R")
+```
+
+```{r}
+#n = 48
+#q_val = 7
+#k_val = 4
+#n_pos = 3
+thresh = 20
+n_iter = 1000
+
+STD_48 = read.csv("STD_48_7_2_1pos.csv", header = TRUE, row.name = 1, stringsAsFactors = FALSE)
+STD_48_mat = read.csv("STD_48_7_2_1pos_mat.csv", header = TRUE, row.name = 1, stringsAsFactors = FALSE) %>%
+  as.matrix()
+
+STD_96 = read.csv("STD_96_5_3_1pos.csv", header = TRUE, row.name = 1, stringsAsFactors = FALSE) 
+STD_96_mat = read.csv("STD_96_5_3_1pos_mat.csv", header = TRUE, row.name = 1, stringsAsFactors = FALSE) %>%
+  as.matrix()
+```
+
+```{r, echo = FALSE}
+draw_STD_2(STD_mat = STD_48_mat, n = 48, q = 7, k = 2)
+draw_STD_2(STD_mat = STD_96_mat, n = 96, q = 5, k = 3)
+```
+
+```{r, echo = FALSE}
+kable_styling(kable(x = STD_48, format = "html"))
+kable_styling(kable(x = STD_96, format = "html"))
+```
+
+2. Define functions
+
+```{r}
+gen_elisa_af
+gen_pool_af
+rgamma_lim
+calc_metrics
+```
+
+3. Iterate the simulation n times for each possible `n_pos`. `n_pos` has a range from 1 to (n-1). Calculate sensitivities and specificities.
+
+```{r, eval = FALSE}
+set.seed(123)
+results_48 = tune_n_pos(n_pos_vals = 1:(48-1), n_iter = n_iter, n = 48, thresh = thresh, STD_mat = STD_48)
+set.seed(123)
+results_96 = tune_n_pos(n_pos_vals = 1:(96-1), n_iter = n_iter, n = 96, thresh = thresh, STD_mat = STD_96)
+
+saveRDS(object = results_48, file = "STD_48_7_2_1000.rds")
+saveRDS(object = results_96, file = "STD_96_5_3_1000.rds")
+```
+
+```{r, echo = FALSE}
+results_48 = readRDS("STD_48_7_2_1000.rds")
+results_96 = readRDS("STD_96_5_3_1000.rds")
+```
+
+```{r}
+metrics_STD_48 = do.call(what = rbind.data.frame, args = results_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+metrics_STD_96 = do.call(what = rbind.data.frame, args = results_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+```
+
+4. Calculate the number of re-tests and number of pipetting for each `n_pos`. Assume that there's no error in the assay and we do not consider the scenario where a sample concentration exceeds the maximum limit of the ELISA assay. The number of pipetting times does not include the pipetting while performing the ELISA.
+
+  `n(putative pos)` = TP + FP = sensitivity$\times$`n_pos` + (1 - specificity)$\times$(`n` - `n_pos`)
+
+```{r}
+cost_STD_48 = calc_STD_cost(data = results_48, n = 48, scheme = STD_48)
+cost_STD_96 = calc_STD_cost(data = results_96, n = 96, scheme = STD_96)
+```
+
+# Results
+
+1. Visualization. Medians with a range from 2.5th percentile to 97.5th percentile are shown here.
+
+```{r, echo = FALSE, fig.keep = "high"}
+# 48-well
+draw_metrics(df = metrics_STD_48, n = 48, method = "median_hilow")
+
+# 96-well
+draw_metrics(df = metrics_STD_96, n = 96, method = "median_hilow")
+```
+
+2. Cost analysis
+
+  1) The number of tests needed:
+
+  The dashed line is the number of tests needed by individual testing (48 tests).
+
+```{r}
+# 48-well
+draw_cost(df = cost_STD_48, n = 48, var = n_test_total, ylab = "The total number of tests needed")
+
+# 96-well
+draw_cost(df = cost_STD_96, n = 96, var = n_test_total, ylab = "The total number of tests needed")
+```
+
+  2) The number of pipetting needed:
+  
+```{r}
+# 48-well
+draw_cost(df = cost_STD_48, n = 48, var = n_pipette, ylab = "The number of transfers")
+
+# 96-well
+draw_cost(df = cost_STD_96, n = 96, var = n_pipette, ylab = "The number of transfers")
+```
+  

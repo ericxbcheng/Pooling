@@ -1,0 +1,94 @@
+---
+title: "Pooling paper 2"
+author: "Xianbin Cheng"
+date: "2/14/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Objective
+
+  * Update `Pooling paper.Rmd` by using the Kolmogorov-Smirnov test to check the difference between simulated aflatoxin data and experimental aflatoxin data.
+  
+# Method
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+source("STD_simulation.R")
+library(mc2d)
+library(MASS)
+library(EnvStats)
+```
+
+1. Remove observations whose aflatoxin concentration is below LOD. Eventually, there are 6 highs and 140 lows.
+
+```{r, echo = TRUE}
+# Experimental aflatoxin data are presented in ppb
+Texas = read.csv(file = "Texas_Conc_Class_528obs_02_05_19.csv", header = TRUE, stringsAsFactors = FALSE, row.names = 1)
+
+# Remove obs whose [FM] is below LOD
+temp = Texas %>%
+  dplyr::filter(!duplicated(x = Texas$AF.ppb.))
+summary(as.factor(temp$AF_class))
+
+# Summary
+AF_H = subset(x = temp, subset = AF_class == "H", select = AF.ppb.) %>% unlist()
+AF_L = subset(x = temp, subset = AF_class == "L", select = AF.ppb.) %>% unlist()
+summary(AF_H)
+summary(AF_L)
+```
+
+```{r, echo = FALSE}
+a = ggplot(data = temp, aes(x = AF.ppb.)) +
+  geom_histogram(aes(fill = AF_class), bins = 60) +
+  scale_fill_discrete(name = "Single Kernel Aflatoxin Level", labels = c(">= 20 ppb", "< 20 ppb")) +
+  labs(x = "Aflatoxin Concentration (ppb)", y = "Number of Kernels") +
+  scale_x_log10(breaks = c(1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4, 1e5)) +
+  theme_bw() +
+  theme(legend.position = "top")
+a
+```
+
+```{r, echo = TRUE}
+set.seed(123)
+
+fitdistr(x = AF_L, densfun = "lognormal")
+fitdistr(x = AF_L/19.99, densfun = "beta", start = list(shape1 = 1, shape2 = 20), method = "BFGS")
+# fitdistr(x = AF_L, densfun = rpert, start = list(mode = 1, shape = 20), min = 0, max = 19.99, method = "L-BFGS-B", lower = c(0.1, 1), upper = c(19, 100))
+
+# PERT
+neg1 = rpert(n = length(AF_L)*1000, min = 0, mode = 0.7, max = 19.99, shape = 80)
+ks.test(x = neg1, y = AF_L)
+
+# Beta
+neg2 = 19.99* rbeta(n = length(AF_L)*1000, shape1 = 1.12, shape2 = 10.87)
+ks.test(x = neg2, y = AF_L)
+
+# Truncated Normal
+neg3 = rlnormTrunc(n = length(AF_L)*1000, meanlog = 0.16, sdlog = 0.91, min = 0, max = 19.99)
+ks.test(x = neg3, y = AF_L)
+
+# Gamma
+pos = rgamma_lim(n = length(AF_H)*1000, alpha = 2, mode = 40000, lb = 20, ub = NULL)
+ks.test(x = pos, y = AF_H)
+
+sim_data = data.frame(conc = c(pos, neg3))
+wilcox.test(x = c(AF_H, AF_L), y = sim_data$conc)
+ks.test(x = c(AF_H, AF_L), y = sim_data$conc)
+```
+
+# Conclusion
+
+We can continue to use Wilcoxon rank sum test given that Wilcoxon rank sum test also investigates whether two independent samples were selected from populations having the same distribution.
+
+# Appendix
+
+```{r}
+sessionInfo()
+```
+

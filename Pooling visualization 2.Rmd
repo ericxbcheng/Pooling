@@ -1,0 +1,196 @@
+---
+title: 'Pooling: Visualization 2'
+author: "Xianbin Cheng"
+date: "January 24, 2019"
+output: html_document
+---
+
+# Objective
+
+Visualize the metrics for 48- and 96-well plate scenarios.
+
+# Method
+
+1. Load all the necessary packages and source codes.
+
+```{r, message=FALSE, warning = FALSE}
+library(tidyverse)
+library(Hmisc)
+source("1D_pooling_simulation.R")
+source("2D_pooling_simulation.R")
+source("STD_simulation.R")
+```
+
+2. Read rds files and necessary parameters.
+
+  * These files contain simulation results of STD(48; 7; 2) pooling, STD(96; 5; 3), one-dimensional and two-dimensional poolings. The iteration time is 1000. The seed is set at 123.
+
+```{r, eval = FALSE}
+# 48-well
+STD_48 = readRDS(file = "STD_48_7_2_1000.rds")
+pool_row_48 = readRDS("1D_row_48_1000.rds")
+pool_col_48 = readRDS("1D_col_48_1000.rds")
+pool_2d_48 = readRDS("2D_48_1000.rds")
+STD_scheme_48 = read.csv("STD_48_7_2_1pos.csv", header = TRUE, row.names = 1)
+
+# 96-well
+STD_96 = readRDS(file = "STD_96_5_3_1000.rds")
+pool_row_96 = readRDS("1D_row_96_1000.rds")
+pool_col_96 = readRDS("1D_col_96_1000.rds")
+pool_2d_96 = readRDS("2D_96_1000.rds")
+STD_scheme_96 = read.csv("STD_96_5_3_1pos.csv", header = TRUE, row.names = 1)
+```
+
+3. Clean them up for visualization.
+
+```{r, eval= FALSE}
+### STD
+# 48-well
+metrics_STD_48 = do.call(what = rbind.data.frame, args = STD_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_STD_48 = calc_STD_cost(data = STD_48, n = 48, scheme = STD_scheme_48)
+
+# 96-well
+metrics_STD_96 = do.call(what = rbind.data.frame, args = STD_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_STD_96 = calc_STD_cost(data = STD_96, n = 96, scheme = STD_scheme_96)
+```
+
+```{r, eval= FALSE}
+### 48-well
+# Pool by rows
+metrics_row_48 = do.call(what = rbind.data.frame, args = pool_row_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_row_48 = calc_1d_cost(data = pool_row_48, n = 48, by = "row")
+
+# Pool by columns
+metrics_col_48 = do.call(what = rbind.data.frame, args = pool_col_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_col_48 = calc_1d_cost(data = pool_col_48, n = 48, by = "column")
+
+### 96-well
+# Pool by rows
+metrics_row_96 = do.call(what = rbind.data.frame, args = pool_row_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_row_96 = calc_1d_cost(data = pool_row_96, n = 96, by = "row")
+
+# Pool by columns
+metrics_col_96 = do.call(what = rbind.data.frame, args = pool_col_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_col_96 = calc_1d_cost(data = pool_col_96, n = 96, by = "column")
+```
+
+```{r, eval = FALSE}
+## 2D Pool
+# 48-well
+metrics_2d_48 = do.call(what = rbind.data.frame, args = pool_2d_48) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_2d_48 = calc_2d_cost(data = pool_2d_48, n = 48)
+
+# 96-well
+metrics_2d_96 = do.call(what = rbind.data.frame, args = pool_2d_96) %>%
+  gather(data = ., key = "Type", value = "Value", - n_pos)
+cost_2d_96 = calc_2d_cost(data = pool_2d_96, n = 96)
+```
+
+```{r, eval= FALSE}
+#### 48-well
+### All metrics
+metrics_all_48 = bind_rows(metrics_STD_48, metrics_row_48, metrics_col_48, metrics_2d_48) %>%
+  mutate(Pooling = c(rep("STD", times = nrow(metrics_STD_48)),
+                     rep("Row", times = nrow(metrics_row_48)),
+                     rep("Column", times = nrow(metrics_col_48)),
+                     rep("2D", times = nrow(metrics_2d_48))))
+
+### All cost
+cost_all_48 = bind_rows(cost_STD_48, cost_row_48, cost_col_48, cost_2d_48) %>%
+  mutate(Pooling = c(rep("STD", times = nrow(cost_STD_48)),
+                     rep("Row", times = nrow(cost_row_48)),
+                     rep("Column", times = nrow(cost_col_48)),
+                     rep("2D", times = nrow(cost_2d_48))))
+
+### 96-well
+### All metrics
+metrics_all_96 = bind_rows(metrics_STD_96, metrics_row_96, metrics_col_96, metrics_2d_96) %>%
+  mutate(Pooling = c(rep("STD", times = nrow(metrics_STD_96)),
+                     rep("Row", times = nrow(metrics_row_96)),
+                     rep("Column", times = nrow(metrics_col_96)),
+                     rep("2D", times = nrow(metrics_2d_96))))
+
+### All cost
+cost_all_96 = bind_rows(cost_STD_96, cost_row_96, cost_col_96, cost_2d_96) %>%
+  mutate(Pooling = c(rep("STD", times = nrow(cost_STD_96)),
+                     rep("Row", times = nrow(cost_row_96)),
+                     rep("Column", times = nrow(cost_col_96)),
+                     rep("2D", times = nrow(cost_2d_96))))
+```
+
+```{r, eval= FALSE}
+write.csv(x = metrics_all_48, file = "Metrics_all_48_02_10_19.csv")
+write.csv(x = metrics_all_96, file = "Metrics_all_96_02_10_19.csv")
+write.csv(x = cost_all_48, file = "Cost_all_48_02_10_19.csv")
+write.csv(x = cost_all_96, file = "Cost_all_96_02_10_19.csv")
+```
+
+```{r, echo= FALSE}
+fix_levels = function(data){
+  data$Pooling = factor(x = data$Pooling, levels = c("Column", "Row", "2D","STD")) 
+  levels(data$Pooling) = c("1D: Column", "1D: Row", "2D", "STD")
+  return(data)
+}
+
+metrics_all_48 = read.csv(file = "Metrics_all_48_02_10_19.csv", row.names = 1) %>% fix_levels(.)
+metrics_all_96 = read.csv(file = "Metrics_all_96_02_10_19.csv", row.names = 1) %>% fix_levels(.)
+cost_all_48 = read.csv(file = "Cost_all_48_02_10_19.csv", row.names = 1) %>% fix_levels(.)
+cost_all_96 = read.csv(file = "Cost_all_96_02_10_19.csv", row.names = 1) %>% fix_levels(.)
+```
+
+# Result
+
+1. Visualization of metrics
+
+```{r, fig.show = "hold", out.width = "50%"}
+# 48-well
+p1 = draw_metrics_all(df = metrics_all_48, n = 48)
+p1
+
+# 96-well
+p2 = draw_metrics_all(df = metrics_all_96, n = 96)
+p2
+```
+
+2. Visualization of reagent cost.
+
+```{r, fig.show = "hold", out.width = "50%"}
+# 48-well
+p3 = draw_cost_all(df = cost_all_48, n = 48, var = n_test_total, ylab = "The total number of tests needed")
+p3
+
+# 96-well
+p4 = draw_cost_all(df = cost_all_96, n = 96, var = n_test_total, ylab = "The total number of tests needed")
+p4
+```
+
+3. Visualization of labor cost
+
+```{r, fig.show = "hold", out.width = "50%"}
+# 48-well
+p5 = draw_cost_all(df = cost_all_48, n = 48, var = n_pipette, ylab = "The number of transfers")
+p5
+
+# 96-well
+p6 = draw_cost_all(df = cost_all_96, n = 96, var = n_pipette, ylab = "The number of transfers")
+p6
+```
+
+```{r, eval = FALSE, echo= FALSE}
+pdf(file = "Pooling Visualization 2.pdf")
+  p1
+  p2
+  p3
+  p4
+  p5
+  p6
+dev.off()
+```
+
